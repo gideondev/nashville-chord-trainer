@@ -4,28 +4,8 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { CheckCircle2, XCircle } from "lucide-react"
-
-// Basic major scale chord families for demonstration
-const chordFamilies = {
-  C: ["C", "Dm", "Em", "F", "G", "Am", "Bdim"],
-  G: ["G", "Am", "Bm", "C", "D", "Em", "F#dim"],
-  D: ["D", "Em", "F#m", "G", "A", "Bm", "C#dim"],
-  A: ["A", "Bm", "C#m", "D", "E", "F#m", "G#dim"],
-  E: ["E", "F#m", "G#m", "A", "B", "C#m", "D#dim"],
-  // Add more keys as needed
-}
-
-// Returns an array of chords in Nashville notation format (e.g. [I, IV, V])
-function getRandomNashvilleProgression(numChords = 4) {
-  const possibleNumbers = ["I", "ii", "iii", "IV", "V", "vi", "vii°"]
-  let progression = []
-  for (let i = 0; i < numChords; i++) {
-    const randIndex = Math.floor(Math.random() * possibleNumbers.length)
-    progression.push(possibleNumbers[randIndex])
-  }
-  return progression
-}
+import { CheckCircle2, XCircle, Clock } from "lucide-react"
+import { chordFamilies, getRandomNashvilleProgression } from '@/utils/chordUtils';
 
 // Return a random selection of chord options for a specific chord (the correct chord + 3 random distractors)
 function getMultipleChoiceOptions(correctChord, allChords) {
@@ -42,23 +22,23 @@ export default function TrainPage() {
   const [currentKey, setCurrentKey] = useState("C")
   const [progression, setProgression] = useState(getRandomNashvilleProgression())
   const [showAnswers, setShowAnswers] = useState(false)
-
-  // For the guessing game
-  const [multipleChoiceData, setMultipleChoiceData] = useState([]) 
-  const [userGuesses, setUserGuesses] = useState([]) 
+  const [multipleChoiceData, setMultipleChoiceData] = useState([])
+  const [userGuesses, setUserGuesses] = useState([])
   const [submitted, setSubmitted] = useState(false)
+  const [currentChordIndex, setCurrentChordIndex] = useState(0)
+  const [timeLeft, setTimeLeft] = useState(30)
 
-  // Convert Nashville notations (I, ii, IV...) to actual chords in the current key
-  const convertToChords = (nashvilleArr) => {
-    const mapIndex = {
-      I: 0, "ii": 1, "iii": 2, IV: 3, V: 4, "vi": 5, "vii°": 6
+    // Convert Nashville notations (I, ii, IV...) to actual chords in the current key
+    const convertToChords = (nashvilleArr) => {
+      const mapIndex = {
+        I: 0, "ii": 1, "iii": 2, IV: 3, V: 4, "vi": 5, "vii°": 6
+      }
+      return nashvilleArr.map(numeral => chordFamilies[currentKey][mapIndex[numeral]])
     }
-    return nashvilleArr.map(numeral => chordFamilies[currentKey][mapIndex[numeral]])
-  }
 
-  // Whenever progression or currentKey changes, update multiple-choice sets
+  const actualChords = convertToChords(progression)
+
   useEffect(() => {
-    const actualChords = convertToChords(progression)
     const mcData = actualChords.map((chord) => {
       const allChordsInKey = chordFamilies[currentKey]
       return getMultipleChoiceOptions(chord, allChordsInKey)
@@ -66,156 +46,149 @@ export default function TrainPage() {
     setMultipleChoiceData(mcData)
     setUserGuesses(Array(progression.length).fill(null))
     setSubmitted(false)
+    setCurrentChordIndex(0)
+    setTimeLeft(30)
   }, [progression, currentKey])
+
+  // Timer logic
+  useEffect(() => {
+    if (submitted || currentChordIndex >= progression.length) return
+
+    const timer = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev <= 1) {
+          handleNextChord(null) // Auto-advance on timeout
+          return 30
+        }
+        return prev - 1
+      })
+    }, 1000)
+
+    return () => clearInterval(timer)
+  }, [currentChordIndex, submitted])
+  
+
+  const handleNextChord = (guess) => {
+    const newGuesses = [...userGuesses]
+    newGuesses[currentChordIndex] = guess
+    setUserGuesses(newGuesses)
+
+    if (currentChordIndex < progression.length - 1) {
+      setCurrentChordIndex(prev => prev + 1)
+      setTimeLeft(30)
+    } else {
+      setSubmitted(true)
+    }
+  }
 
   const handleNewProgression = () => {
     setProgression(getRandomNashvilleProgression())
     setShowAnswers(false)
+    setSubmitted(false)
+    setCurrentChordIndex(0)
+    setTimeLeft(30)
   }
+  
 
-  // Handle guess changes (radio-button style or anything else)
-  const handleGuess = (chord, idx) => {
-    const newGuesses = [...userGuesses]
-    newGuesses[idx] = chord
-    setUserGuesses(newGuesses)
-  }
-
-  // Once submitted, we evaluate correctness
-  const handleSubmit = () => {
-    setSubmitted(true)
-    setShowAnswers(true) // optional: automatically reveal actual chords
-  }
-
-  // Evaluate correctness for the scoreboard
-  const actualChords = convertToChords(progression)
   const correctCount = userGuesses.reduce((acc, guess, idx) => {
     return guess === actualChords[idx] ? acc + 1 : acc
   }, 0)
+  
 
   return (
     <main className="container mx-auto p-4 md:p-6 max-w-4xl">
       <div className="space-y-6">
-        {/* Header Section */}
+        {/* Header and Controls remain same */}
         <div className="space-y-2">
           <h1 className="text-3xl font-bold tracking-tight">Chord Progression Trainer</h1>
           <p className="text-muted-foreground">Practice identifying chords in different keys</p>
         </div>
 
-        {/* Controls Card */}
-        <Card>
+          {/* Key Selection Controls */}
+          <Card>
           <CardContent className="pt-6">
-            <div className="flex flex-col md:flex-row gap-4 items-start md:items-center">
-              <div className="w-full md:w-auto">
-                <Select value={currentKey} onValueChange={setCurrentKey}>
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder="Select key" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Object.keys(chordFamilies).map((key) => (
-                      <SelectItem key={key} value={key}>
-                        {key}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
+              <Select value={currentKey} onValueChange={setCurrentKey}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Select key" />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.keys(chordFamilies).map((key) => (
+                    <SelectItem key={key} value={key}>
+                      {key} Major
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <Button 
                 onClick={handleNewProgression}
-                className="w-full md:w-auto"
                 variant="secondary"
               >
-                Generate New Progression
+                New Progression
               </Button>
             </div>
           </CardContent>
         </Card>
 
-        {/* Progression Display Card */}
+        {/* Progress & Timer Card */}
         <Card>
-          <CardHeader className="pb-0">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-lg">Current Progression</CardTitle>
-              <Button 
-                variant="ghost" 
-                size="sm"
-                onClick={() => setShowAnswers(!showAnswers)}
-              >
-                {showAnswers ? "Hide Chords" : "Reveal Chords"}
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent className="pt-6">
-            <div className="space-y-4">
-              {/* This row shows the Nashville numerals + correct chords if revealed */}
-              <div className="flex flex-wrap gap-3">
-                {progression.map((num, idx) => (
-                  <div key={idx} className="flex flex-col gap-2">
-                    <div className="h-14 w-14 rounded-lg bg-muted flex items-center justify-center text-lg font-semibold">
-                      {num}
-                    </div>
-                    {showAnswers && (
-                      <div className="h-14 w-14 rounded-lg bg-primary/10 flex items-center justify-center text-sm font-medium text-primary">
-                        {actualChords[idx]}
-                      </div>
-                    )}
-                  </div>
-                ))}
+          <CardContent className="pt-6 flex flex-col items-center gap-4">
+            <div className="flex items-center gap-4">
+              <div className="text-sm font-medium">
+                Progress: {currentChordIndex + 1}/{progression.length}
+              </div>
+              <div className="flex items-center gap-2 text-orange-500">
+                <Clock className="h-5 w-5" />
+                <span className="font-mono">{timeLeft}s</span>
               </div>
             </div>
-          </CardContent>
-        </Card>
-
-        {/* Guessing Section */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Guess The Chords</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Choose what you think each chord is before submitting your answers!
-            </p>
-            <div className="flex flex-col space-y-3">
-              {progression.map((num, idx) => (
-                <div key={idx} className="flex flex-col gap-2">
-                  <span className="text-sm font-medium">Chord for {num}?</span>
-                  <div className="flex gap-2 flex-wrap">
-                    {multipleChoiceData[idx]?.map((option, i) => {
-                      const isCorrect = submitted && option === actualChords[idx]
-                      const isChosen = userGuesses[idx] === option
-                      const isWrongChoice = submitted && isChosen && !isCorrect
-
-                      return (
-                        <Button
-                          key={i}
-                          variant={isChosen ? "default" : "outline"}
-                          className={
-                            isWrongChoice
-                              ? "bg-destructive/10 text-destructive"
-                              : isCorrect
-                              ? "bg-success/10 text-success"
-                              : ""
-                          }
-                          onClick={() => handleGuess(option, idx)}
-                        >
-                          {option}
-                        </Button>
-                      )
-                    })}
-                  </div>
+            
+            {!submitted && (
+              <div className="space-y-4 text-center">
+                <div className="text-4xl font-bold tracking-tighter">
+                  {progression[currentChordIndex]}
                 </div>
-              ))}
-            </div>
-            <Button
-              variant="default"
-              onClick={handleSubmit}
-              disabled={userGuesses.some((g) => g === null)} // optional: disable if not all chords guessed
-            >
-              Submit Answers
-            </Button>
+                <div className="flex justify-center gap-2 flex-wrap">
+                  {multipleChoiceData[currentChordIndex]?.map((option, i) => (
+                    <Button
+                      key={i}
+                      variant="outline"
+                      className="text-lg px-6 py-4"
+                      onClick={() => handleNextChord(option)}
+                    >
+                      {option}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {submitted && (
+              <div className="text-center space-y-4">
+                <div className="text-2xl font-bold">Results</div>
+                <div className="flex flex-wrap gap-2 justify-center">
+                  {progression.map((num, idx) => (
+                    <div key={idx} className="flex flex-col items-center p-2 border rounded-lg">
+                      <div className="text-muted-foreground">{num}</div>
+                      <div className="font-medium">
+                        {userGuesses[idx]}
+                        <span className="text-muted-foreground"> / </span>
+                        <span className="text-primary">{actualChords[idx]}</span>
+                      </div>
+                      {userGuesses[idx] === actualChords[idx] ? (
+                        <CheckCircle2 className="h-4 w-4 text-success" />
+                      ) : (
+                        <XCircle className="h-4 w-4 text-destructive" />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 
-        {/* Answers Card - Only shows when submitted */}
+        {/* Results Card - Similar to before but updated */}
         {submitted && (
           <Card className="border-success/20 bg-success/5">
             <CardContent className="p-4 flex flex-col gap-3">
@@ -223,20 +196,16 @@ export default function TrainPage() {
                 <CheckCircle2 className="h-5 w-5 text-success" />
                 <div className="space-y-1">
                   <p className="text-sm font-medium text-success">
-                    You got {correctCount} out of {progression.length} correct!
+                    Final Score: {correctCount}/{progression.length}
                   </p>
                 </div>
               </div>
-              {correctCount === progression.length ? (
-                <p className="text-sm">
-                  Nice job, you badass chord wizard. Generate a new progression and keep going!
-                </p>
-              ) : (
-                <div className="flex items-center gap-2 text-sm">
-                  <XCircle className="h-5 w-5 text-destructive" />
-                  <span>Missed a few. No sweat, practice makes perfect!</span>
-                </div>
-              )}
+              <Button 
+                onClick={handleNewProgression}
+                variant="default"
+              >
+                Try Another Progression
+              </Button>
             </CardContent>
           </Card>
         )}
