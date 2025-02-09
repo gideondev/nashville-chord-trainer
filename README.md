@@ -8,7 +8,7 @@ A interactive web application for musicians to practice recognizing common chord
 
 ## Features
 
-- **Key Selection**: Choose from 5 major keys (C, G, D, A, E)
+- **Key Selection**: Choose from the major keys (C, D, E, F, G, A, B)
 - **Common Progressions**: Focus on real-world patterns used in pop, rock, and jazz
 - **Timed Challenges**: 30-second timer per chord with auto-advance
 - **Progress Tracking**: Visual feedback with correct/incorrect indicators
